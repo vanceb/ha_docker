@@ -1,0 +1,87 @@
+version: '3'
+networks:
+  ha:
+services:
+  mosquitto:
+    container_name: mosquitto
+    image: eclipse-mosquitto:latest
+    #    network_mode: host
+    networks:
+      - ha
+    ports:
+      - 1883:1883
+    volumes:
+      - /home/vance/mount-dirs/mosquitto/config:/mosquitto/config
+      - /home/vance/mount-dirs/mosquitto/data:/mosquitto/data
+      - /home/vance/mount-dirs/mosquitto/log:/mosquitto/log
+    restart: always
+
+  homeassistant:
+    container_name: homeassistant
+    image: "homeassistant/home-assistant:latest"
+    #    network_mode: host
+    networks:
+      - ha
+    ports:
+      - 8123:8123
+    volumes:
+      - /home/vance/mount-dirs/homeassistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: always
+    depends_on:
+      - mosquitto
+
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    depends_on:
+      - mosquitto
+    image: koenkk/zigbee2mqtt:latest
+    volumes:
+      - /home/vance/mount-dirs/zigbee2mqtt/data:/app/data
+      - /run/udev:/run/udev:ro
+    #    network_mode: host
+    networks:
+      - ha
+    ports:
+      - 8080:8080
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    restart: always
+    privileged: true
+
+  appdaemon:
+    container_name: appdaemon
+    image: acockburn/appdaemon:latest
+    #    environment:
+    #      - HA_URL="http://localhost:8123/"
+    #      - HA_KEY="key from home assistant"
+    #    network_mode: host
+    networks:
+      - ha
+    ports:
+      - 5050:5050
+    volumes:
+      - /home/vance/mount-dirs/appdaemon/config:/conf
+      - /etc/localtime:/etc/localtime:ro
+    restart: always
+    depends_on:
+      - homeassistant
+  caddy:
+    container_name: caddy
+    image: caddy:latest
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - ha
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - /home/vance/mount-dirs/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - /home/vance/mount-dirs/caddy/config:/config
+      - /home/vance/mount-dirs/caddy/data:/data
+    depends_on: 
+      - homeassistant
+
